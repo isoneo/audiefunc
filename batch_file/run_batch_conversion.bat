@@ -1,0 +1,1 @@
+java -jar ".\audie_pdf_compressor.jar" "D:\test"
