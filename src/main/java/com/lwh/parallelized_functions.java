@@ -119,4 +119,41 @@ public class parallelized_functions {
         return outputs;
     }
 
+    public static List<String> parallelized_pdfsmart_copy_lettersize(List<String> list_of_files_to_process, String output_saveloc)
+            throws InterruptedException, ExecutionException, IOException, Exception {
+
+        int threads = Runtime.getRuntime().availableProcessors();
+        ExecutorService service = Executors.newFixedThreadPool(threads);
+
+        List<List<String>> chunk_list = partition(list_of_files_to_process, 20);
+
+        List<Future<String>> futures = new ArrayList<Future<String>>();
+        for (final List<String> indv_input_list : chunk_list) {
+            Callable<String> callable = new Callable<String>() {
+                public String call() throws Exception {
+                    String output = new String();
+                    for (String i :indv_input_list) {
+                        supporting_tools.manipulatePdf(i, output_saveloc);
+                    }
+                    Thread.sleep(1500);
+
+                    return output;
+                }
+            };
+            futures.add(service.submit(callable));
+        }
+
+        service.shutdown();
+
+        List<String> outputs = new ArrayList<String>();
+        for (Future<String> future : futures) {
+            //outputs.add(future.get());
+            try {
+                outputs.add(future.get());
+            } catch (InterruptedException e) {
+            } catch (ExecutionException e) {
+            }
+        }
+        return outputs;
+    }
 }

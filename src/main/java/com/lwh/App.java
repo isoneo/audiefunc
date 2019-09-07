@@ -26,7 +26,7 @@ public class App {
         List<String> raw_pdf_file_list = supporting_tools.grab_all_matching_files(sav_folder,"pdf");
         System.out.println("Files matching search\n"+raw_pdf_file_list);
 
-        parallelized_functions.parallelized_pdfsmart_copy(raw_pdf_file_list, sav_folder);
+        parallelized_functions.parallelized_pdfsmart_copy_lettersize(raw_pdf_file_list, sav_folder);
 
         logger.info("All Processes finished");
     }

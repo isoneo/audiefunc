@@ -3,12 +3,14 @@ package com.lwh; /**
  */
 
 
-import com.itextpdf.text.Document;
-import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.*;
+import com.itextpdf.text.pdf.*;
+import com.itextpdf.text.pdf.PdfDictionary;
+import com.itextpdf.text.pdf.PdfName;
+import com.itextpdf.text.pdf.PdfNumber;
 import com.itextpdf.text.pdf.PdfReader;
-import com.itextpdf.text.pdf.PdfSmartCopy;
 import com.itextpdf.text.pdf.PdfStamper;
-import com.itextpdf.text.pdf.PdfWriter;
+
 
 import java.io.*;
 import java.nio.file.Path;
@@ -85,6 +87,8 @@ public class supporting_tools {
         PdfStamper stamper = new PdfStamper(reader, new FileOutputStream(dest +'\\'+ cv_name), PdfWriter.VERSION_1_5);
         stamper.getWriter().setCompressionLevel(9);
 
+
+
         int total = reader.getNumberOfPages() + 1;
         for (int i = 1; i < total; i++) {
             reader.setPageContent(i, reader.getPageContent(i));
@@ -100,6 +104,43 @@ public class supporting_tools {
         }
 
     }
+
+    public static void smartcopypdf_lettersize(String src, String dest) throws IOException, DocumentException {
+
+        File orig_file = new File(src);
+        String orig_name = orig_file.getName();
+        String cv_name = "cv_" + orig_name;
+        System.out.println("Starting PDF Compression for " + orig_name);
+
+        // Create reader to read in PDF file
+        PdfReader reader = new PdfReader(src);
+        reader.removeUnusedObjects();
+        reader.removeFields();
+        reader.removeAnnotations();
+
+        Document document = new Document(PageSize.LETTER);
+        PdfSmartCopy pdfSmartCopy = new PdfSmartCopy(document, new FileOutputStream(dest + '\\' + cv_name));
+        pdfSmartCopy.setPageSize(PageSize.LETTER);
+
+        int total = reader.getNumberOfPages() + 1;
+        for (int i = 1; i < total; i++) {
+            PdfImportedPage pdfImportedPage = pdfSmartCopy.getImportedPage(reader, i);
+            document.open();
+            pdfSmartCopy.addPage(pdfImportedPage);
+            document.close();
+        }
+
+
+        reader.close();
+
+        pdfSmartCopy.setFullCompression();
+
+        pdfSmartCopy.close();
+
+    }
+
+
+
     public static void smartcopyPDF(String src, String dest) throws IOException, DocumentException {
 
         File orig_file = new File(src);
@@ -108,7 +149,7 @@ public class supporting_tools {
         System.out.println("Starting PDF Compression for " + orig_name);
 
 
-        Document document = new Document();
+        Document document = new Document(PageSize.LETTER);
         PdfSmartCopy pdfSmartCopy = new PdfSmartCopy(document, new FileOutputStream(dest + '\\' + cv_name));
 
         document.open();
@@ -126,9 +167,127 @@ public class supporting_tools {
         pdfSmartCopy.close();
     }
 
+    public static PdfArray scaleDown(PdfArray original, float scale) {
+        if (original == null)
+            return null;
+//        float width = original.getAsNumber(2).floatValue()
+//                - original.getAsNumber(0).floatValue();
+//        float height = original.getAsNumber(3).floatValue()
+//                - original.getAsNumber(1).floatValue();
+//        return new PdfRectangle(width * scale, height * scale);
+        return new PdfRectangle(612,792);
+    }
 
 
+    public static class ScaleEvent extends PdfPageEventHelper {
 
+        protected float scale = 1;
+        protected PdfDictionary pageDict;
 
+        public ScaleEvent(float scale) {
+            this.scale = scale;
+        }
+
+        public void setPageDict(PdfDictionary pageDict) {
+            this.pageDict = pageDict;
+        }
+
+        @Override
+        public void onStartPage(PdfWriter writer, Document document) {
+            writer.addPageDictEntry(PdfName.ROTATE, pageDict.getAsNumber(PdfName.ROTATE));
+            writer.addPageDictEntry(PdfName.MEDIABOX, scaleDown(pageDict.getAsArray(PdfName.MEDIABOX), scale));
+            writer.addPageDictEntry(PdfName.CROPBOX, scaleDown(pageDict.getAsArray(PdfName.CROPBOX), scale));
+        }
+    }
+    public static float generate_auto_scale(String orig_file) throws Exception, IOException {
+        PdfReader reader = new PdfReader(orig_file);
+
+        PdfDictionary first_page = reader.getPageN(1);
+        Rectangle pagesize = reader.getPageSize(first_page);
+        float orig_height = pagesize.getHeight();
+        float orig_width = pagesize.getWidth();
+        String page_orientation = "";
+        float orig_length = 0;
+
+        // Protrait
+        if ( orig_height > orig_width ) {
+            orig_length = orig_height;
+            page_orientation = "Portrait";
+        } else {
+            // Landscape
+            orig_length = orig_width;
+            page_orientation = "Landscape";
+        }
+
+        float calc_scale = 792 / orig_length;
+        System.out.println("Scale for PDF "+ orig_file);
+        System.out.println("   Original PDF orientation is"+ page_orientation);
+
+        System.out.println("   Orig pdf length "+ orig_length);
+        System.out.println("   Calculated Scaling "+ calc_scale);
+        return calc_scale;
+    }
+    public static Rectangle get_page_orientation(PdfImportedPage read_page){
+        float orig_height = read_page.getHeight();
+        float orig_width = read_page.getWidth();
+
+        Rectangle output = null;
+        // Portrait
+        if ( orig_height > orig_width ) {
+            output = PageSize.LETTER;
+        } else {
+            // Landscape
+            output = PageSize.LETTER.rotate();
+        }
+        return output;
+    }
+    public static void manipulatePdf(String src, String dest) throws Exception {
+
+        File orig_file = new File(src);
+        String orig_name = orig_file.getName();
+        String cv_name = "cv_" + orig_name;
+        String new_sav_location = dest +"\\"+"converted_pdfs";
+        File dest_directory = new File(new_sav_location);
+        if (! dest_directory.exists()){
+            dest_directory.mkdirs();
+        }
+
+        PdfReader reader = new PdfReader(src);
+        float scale = supporting_tools.generate_auto_scale(src);
+        ScaleEvent event = new ScaleEvent(scale);
+        event.setPageDict(reader.getPageN(1));
+
+        int n = reader.getNumberOfPages();
+        Document document = new Document();
+        PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(new_sav_location + '\\' + orig_name));
+        writer.setPageEvent(event);
+
+        Image page;
+        for (int p = 1; p <= n; p++) {
+            PdfImportedPage read_in_page = writer.getImportedPage(reader, p);
+            // get orientation of original page
+            Rectangle orig_page_orientation_box = get_page_orientation(read_in_page);
+
+            // If first page => Open document set orientation
+            if ( p ==1 ){
+                document.open();
+                document.setPageSize(orig_page_orientation_box);
+            } else {
+                // If not first page set page size and then add new page
+                document.setPageSize(orig_page_orientation_box);
+                document.newPage();
+            }
+
+            page = Image.getInstance(read_in_page);
+            page.setAbsolutePosition(0, 0);
+            page.scalePercent(scale * 100);
+            document.add(page);
+            if (p < n) {
+                event.setPageDict(reader.getPageN(p + 1));
+            }
+
+        }
+        document.close();
+    }
 
 }
